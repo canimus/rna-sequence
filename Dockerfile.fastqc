@@ -1,0 +1,29 @@
+FROM python:3.11-alpine
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN apk add --no-cache perl
+RUN apk add --no-cache openjdk17
+RUN apk add --no-cache fontconfig ttf-dejavu
+
+# fastqc
+RUN mkdir -p /tools
+WORKDIR /tools
+RUN wget https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.12.1.zip && \
+    unzip fastqc_v0.12.1.zip && \
+    chmod +x FastQC/fastqc && \
+    ln -s /tools/FastQC/fastqc /usr/local/bin/fastqc
+
+RUN rm -rf /tools/fastqc_v0.12.1.zip
+RUN mkdir -p /app
+
+WORKDIR /app
+RUN pip install dagster-pipes
+
+RUN mkdir -p /scripts
+VOLUME /scripts
+
+RUN mkdir -p /inputs
+VOLUME /inputs
+
+RUN mkdir -p /outputs
+VOLUME /outputs

@@ -1,0 +1,9 @@
+ops:
+  fasta_gz:
+    config:
+      input_folder: data
+      input_pattern: '*.gz'
+  fasta_md5:
+    config:
+      input_folder: data
+      input_pattern: MD5.txt
