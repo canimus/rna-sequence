@@ -1,10 +1,13 @@
 import hashlib
 import os
 from glob import glob
+from operator import attrgetter as at
+from operator import methodcaller as mc
 from pathlib import Path
 from typing import Iterator, List, Tuple
 
 from dagster_docker import PipesDockerClient
+from toolz import compose, first, last
 
 import dagster as dg
 
@@ -85,6 +88,10 @@ def fasta_gz(
 
 
 @dg.asset(
+    ins={
+        "fasta_gz": dg.AssetIn(key="fasta_gz"),
+        "fasta_md5": dg.AssetIn(key="fasta_md5"),
+    },
     check_specs=[
         dg.AssetCheckSpec(
             name="valid_md5",
@@ -92,21 +99,38 @@ def fasta_gz(
             asset="md5_validate",
             blocking=True,
         )
-    ]
+    ],
 )
 def md5_validate(
     context: dg.AssetExecutionContext,
     fasta_gz: List[Tuple[str, str]],
     fasta_md5: List[Tuple[str, str]],
-) -> Iterator[dg.Output[bool]]:
+) -> Iterator[dg.Output[Tuple[bool, List[str]]]]:
     """Confirm all valid"""
-    result = set(fasta_gz) == set(fasta_md5)
+    inventory = set(fasta_gz)
+    result = inventory == set(fasta_md5)
     yield dg.AssetCheckResult(passed=result, check_name="valid_md5")
-    yield dg.Output(value=result)
+
+    _names = list(map(last, inventory))
+    yield dg.Output(value=tuple([result, _names]))
 
 
-@dg.asset(deps=[md5_validate])
-def fastqc_runner(context: dg.AssetExecutionContext, docker_client: PipesDockerClient):
+@dg.asset(
+    ins={"md5_validate": dg.AssetIn(key="md5_validate")},
+    check_specs=[
+        dg.AssetCheckSpec(
+            name="full_sequence",
+            description="Reports created for all sequences",
+            asset="fastqc_runner",
+            blocking=True,
+        )
+    ],
+)
+def fastqc_runner(
+    context: dg.AssetExecutionContext,
+    docker_client: PipesDockerClient,
+    md5_validate: Tuple[bool, List[str]],
+) -> Iterator[dg.Output[str]]:
     """Docker execution of fastqc tool"""
     result = docker_client.run(
         image="fastqc",
@@ -130,4 +154,14 @@ def fastqc_runner(context: dg.AssetExecutionContext, docker_client: PipesDockerC
             },
         },
     )
-    return result.get_results()
+
+    files_io = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs"))
+    _, files_spec = md5_validate    
+
+    _stems = list(map(compose(first, mc("split", "-"), at("stem"), Path), files_spec))
+    _outs = list(map(compose(first, mc("split", "-"), at("stem"), Path), files_io))
+    complete = set(_stems).issubset(set(_outs))
+
+    yield dg.AssetCheckResult(passed=complete, check_name="full_sequence")
+
+    yield dg.Output(value=str(result.get_results()))
