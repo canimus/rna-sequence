@@ -23,6 +23,7 @@ class FolderConfig(dg.Config):
             name="files_found",
             description="Validates existance of md5 files",
             asset="fasta_md5",
+            blocking=True,
         )
     ]
 )
@@ -52,6 +53,7 @@ def fasta_md5(
             name="files_found",
             description="Validates existance of gz files",
             asset="fasta_gz",
+            blocking=True,
         )
     ]
 )
@@ -88,6 +90,7 @@ def fasta_gz(
             name="valid_md5",
             description="Validates that md5 strings match the file content",
             asset="md5_validate",
+            blocking=True,
         )
     ]
 )

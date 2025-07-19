@@ -43,7 +43,7 @@ unit: # Run unit test
 renew: # Clean up home
 	@rm -rf dagster
 	@mkdir -p dagster
-	@cp conf/dagster.yaml dagster/
+	@cp config/dagster.yaml dagster/
 	@echo "✨ done"
 
 launch: # Start dagster

@@ -12,6 +12,8 @@ dagster/
 inputs/
 outputs/
 .vscode/
+inputs
+outputs
 
 # Distribution / packaging
 .Python
