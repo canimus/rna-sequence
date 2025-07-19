@@ -156,11 +156,12 @@ def fastqc_runner(
     )
 
     files_io = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs"))
-    _, files_spec = md5_validate    
+    _, files_spec = md5_validate
 
-    _stems = list(map(compose(first, mc("split", "-"), at("stem"), Path), files_spec))
-    _outs = list(map(compose(first, mc("split", "-"), at("stem"), Path), files_io))
-    complete = set(_stems).issubset(set(_outs))
+    _stems = compose(first, mc("split", "-"), at("stem"), Path)
+    _f_stems = list(map(_stems, files_spec))
+    _f_outs = list(map(_stems, files_io))
+    complete = set(_f_stems).issubset(set(_f_outs))
 
     yield dg.AssetCheckResult(passed=complete, check_name="full_sequence")
 
