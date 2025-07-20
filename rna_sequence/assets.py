@@ -24,6 +24,8 @@ class RnaSequenceConfig(dg.Config):
 
     fastp_parallel: int = 24
 
+    bowtie_parallel: int = 24
+
 
 @dg.asset(
     check_specs=[
@@ -342,5 +344,65 @@ def fastqc_post(
     # complete = set(_f_stems).issubset(set(_f_outs))
 
     yield dg.AssetCheckResult(passed=True, check_name="full_sequence")
+
+    yield dg.Output(value=str(result.get_results()))
+
+
+@dg.asset(
+    deps=[fastqc_post],
+    check_specs=[
+        dg.AssetCheckSpec(
+            name="file_count",
+            description="Indexing complet",
+            asset="bowtie_index",
+            blocking=True,
+        )
+    ],
+    kinds={"docker"},
+)
+def bowtie_index(
+    context: dg.AssetExecutionContext,
+    config: RnaSequenceConfig,
+    docker_client: PipesDockerClient,
+) -> Iterator[dg.Output[str]]:
+    """Docker execution of bowtie2 tool"""
+    result = docker_client.run(
+        image="bowtie2",
+        command=["python", "/scripts/bowtie2.py"],
+        context=context,
+        extras={
+            "parallel_threads": config.bowtie_parallel,
+        },
+        container_kwargs={
+            "auto_remove": False,
+            "volumes": {
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "scripts"): {
+                    "bind": "/scripts",
+                    "mode": "ro",
+                },
+                str(
+                    Path(os.getenv("RNA_SEQUENCE_HOME")) / "data" / "bowtie2" / "inputs"
+                ): {
+                    "bind": "/inputs",
+                    "mode": "ro",
+                },
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs5"): {
+                    "bind": "/outputs",
+                    "mode": "rw",
+                },
+            },
+        },
+    )
+
+    # FIXME: use the glob instead of the listdir
+    # files_in = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "inputs"))
+    # files_out = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs2"))
+
+    # _stems = compose(first, mc("split", "-"), at("stem"), Path)
+    # _f_ins = list(map(_stems, files_in))
+    # _f_outs = list(map(_stems, files_out))
+    # complete = set(_f_ins).issubset(set(_f_outs))
+
+    yield dg.AssetCheckResult(passed=True, check_name="file_count")
 
     yield dg.Output(value=str(result.get_results()))

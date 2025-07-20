@@ -1,0 +1,47 @@
+# --- Stage 1: Build Bowtie2 and dependencies ---
+FROM python:3.11-slim AS build
+
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y \
+    libgcc-s1 \
+    libstdc++6 \
+    wget \
+    unzip \
+    perl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /tools
+WORKDIR /tools
+RUN wget https://github.com/BenLangmead/bowtie2/releases/download/v2.5.4/bowtie2-2.5.4-linux-x86_64.zip
+RUN unzip bowtie2-2.5.4-linux-x86_64.zip
+RUN rm -rf bowtie2-2.5.4-linux-x86_64.zip
+
+# --- Stage 2: Minimal runtime with Bowtie2 and dependencies ---
+FROM python:3.11-slim AS runtime
+
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libgcc-s1 \
+    libstdc++6 \
+    perl \
+    parallel \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Bowtie2 binaries from build stage
+COPY --from=build /tools/bowtie2-2.5.4-linux-x86_64 /tools/bowtie2-2.5.4-linux-x86_64
+
+ENV PATH="/tools/bowtie2-2.5.4-linux-x86_64:$PATH"
+
+RUN mkdir -p /app
+WORKDIR /app
+RUN pip install dagster-pipes
+
+VOLUME /scripts
+VOLUME /inputs
+VOLUME /indexes
+VOLUME /outputs
