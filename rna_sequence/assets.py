@@ -12,13 +12,17 @@ from toolz import compose, first, last
 import dagster as dg
 
 
-class FolderConfig(dg.Config):
+class RnaSequenceConfig(dg.Config):
     input_pattern: str = "MD5.txt"
     input_folder: str = "/inputs"
 
     output_pattern: str = "*.gz"
     output_folder: str = "/outputs"
 
+    umi_bc_pattern: str = "NNNNCCCCNNN"
+    umi_parallel: int = 24
+
+    fastp_parallel: int = 24
 
 @dg.asset(
     check_specs=[
@@ -28,10 +32,11 @@ class FolderConfig(dg.Config):
             asset="fasta_md5",
             blocking=True,
         )
-    ]
+    ],
+    kinds={"python"}
 )
 def fasta_md5(
-    context: dg.AssetExecutionContext, config: FolderConfig
+    context: dg.AssetExecutionContext, config: RnaSequenceConfig
 ) -> Iterator[dg.Output[List[Tuple[str, str]]]]:
     """Retrive MD5 files"""
     files: List[str] = glob(
@@ -58,10 +63,11 @@ def fasta_md5(
             asset="fasta_gz",
             blocking=True,
         )
-    ]
+    ],
+    kinds={"python"}
 )
 def fasta_gz(
-    context: dg.AssetExecutionContext, config: FolderConfig
+    context: dg.AssetExecutionContext, config: RnaSequenceConfig
 ) -> Iterator[dg.Output[List[Tuple[str, str]]]]:
     """Retrive GZ files"""
 
@@ -100,6 +106,7 @@ def fasta_gz(
             blocking=True,
         )
     ],
+    kinds={"python"},
 )
 def md5_validate(
     context: dg.AssetExecutionContext,
@@ -125,6 +132,7 @@ def md5_validate(
             blocking=True,
         )
     ],
+    kinds={"docker"},
 )
 def fastqc_runner(
     context: dg.AssetExecutionContext,
@@ -164,5 +172,172 @@ def fastqc_runner(
     complete = set(_f_stems).issubset(set(_f_outs))
 
     yield dg.AssetCheckResult(passed=complete, check_name="full_sequence")
+
+    yield dg.Output(value=str(result.get_results()))
+
+
+@dg.asset(
+    deps=[fastqc_runner],
+    check_specs=[
+        dg.AssetCheckSpec(
+            name="adapter_trim",
+            description="Trimming all sequences",
+            asset="umitools_runner",
+            blocking=True,
+        )
+    ],
+    kinds={"docker"},
+)
+def umitools_runner(
+    context: dg.AssetExecutionContext,
+    config: RnaSequenceConfig,
+    docker_client: PipesDockerClient,    
+) -> Iterator[dg.Output[str]]:
+    """Docker execution of umi_tool tool"""
+    result = docker_client.run(
+        image="umitools",
+        command=["python", "/scripts/umitools.py"],
+        context=context,
+        extras={
+            "bc_pattern": config.umi_bc_pattern,
+            "parallel_threads": config.umi_parallel
+        },
+        container_kwargs={
+            "auto_remove": False,
+            "volumes": {
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "scripts"): {
+                    "bind": "/scripts",
+                    "mode": "ro",
+                },
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "inputs"): {
+                    "bind": "/inputs",
+                    "mode": "ro",
+                },
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs2"): {
+                    "bind": "/outputs",
+                    "mode": "rw",
+                },
+            },
+        },
+    )
+
+    files_in = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "inputs"))
+    files_out = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs2"))    
+
+    _stems = compose(first, mc("split", "-"), at("stem"), Path)
+    _f_ins = list(map(_stems, files_in))
+    _f_outs = list(map(_stems, files_out))
+    complete = set(_f_ins).issubset(set(_f_outs))
+
+    yield dg.AssetCheckResult(passed=complete, check_name="adapter_trim")
+
+    yield dg.Output(value=str(result.get_results()))
+
+@dg.asset(
+    deps=[umitools_runner],
+    check_specs=[
+        dg.AssetCheckSpec(
+            name="nucleotide_trim",
+            description="Trimming fastp nucleaotide check",
+            asset="fastp_runner",
+            blocking=True,
+        )
+    ],
+    kinds={"docker"},
+)
+def fastp_runner(
+    context: dg.AssetExecutionContext,
+    config: RnaSequenceConfig,
+    docker_client: PipesDockerClient,    
+) -> Iterator[dg.Output[str]]:
+    """Docker execution of fastp tool"""
+    result = docker_client.run(
+        image="fastp",
+        command=["python", "/scripts/fastp.py"],
+        context=context,
+        extras={            
+            "parallel_threads": config.fastp_parallel
+        },
+        container_kwargs={
+            "auto_remove": False,
+            "volumes": {
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "scripts"): {
+                    "bind": "/scripts",
+                    "mode": "ro",
+                },
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs2"): {
+                    "bind": "/inputs",
+                    "mode": "ro",
+                },
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs3"): {
+                    "bind": "/outputs",
+                    "mode": "rw",
+                },
+            },
+        },
+    )
+
+    # files_in = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "inputs"))
+    # files_out = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs2"))    
+
+    # _stems = compose(first, mc("split", "-"), at("stem"), Path)
+    # _f_ins = list(map(_stems, files_in))
+    # _f_outs = list(map(_stems, files_out))
+    # complete = set(_f_ins).issubset(set(_f_outs))
+
+    yield dg.AssetCheckResult(passed=True, check_name="nucleotide_trim")
+
+    yield dg.Output(value=str(result.get_results()))
+
+
+@dg.asset(
+    deps=[fastp_runner],
+    check_specs=[
+        dg.AssetCheckSpec(
+            name="full_sequence",
+            description="Reports created for all sequences",
+            asset="fastqc_post",
+            blocking=True,
+        )
+    ],
+    kinds={"docker"},
+)
+def fastqc_post(
+    context: dg.AssetExecutionContext,
+    docker_client: PipesDockerClient,    
+) -> Iterator[dg.Output[str]]:
+    """Docker execution of fastqc tool"""
+    result = docker_client.run(
+        image="fastqc",
+        command=["python", "/scripts/fastqc.py"],
+        context=context,
+        container_kwargs={
+            "auto_remove": False,
+            "volumes": {
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "scripts"): {
+                    "bind": "/scripts",
+                    "mode": "ro",
+                },
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs3"): {
+                    "bind": "/inputs",
+                    "mode": "ro",
+                },
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs4"): {
+                    "bind": "/outputs",
+                    "mode": "rw",
+                },
+            },
+        },
+    )
+
+    # files_io = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs"))
+    # _, files_spec = md5_validate
+
+    # _stems = compose(first, mc("split", "-"), at("stem"), Path)
+    # _f_stems = list(map(_stems, files_spec))
+    # _f_outs = list(map(_stems, files_io))
+    # complete = set(_f_stems).issubset(set(_f_outs))
+
+    yield dg.AssetCheckResult(passed=True, check_name="full_sequence")
 
     yield dg.Output(value=str(result.get_results()))

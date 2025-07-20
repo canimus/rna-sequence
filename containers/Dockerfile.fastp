@@ -1,0 +1,19 @@
+FROM python:3.11-alpine
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# fastqc
+RUN mkdir -p /tools
+WORKDIR /tools
+RUN wget http://opengene.org/fastp/fastp && \
+    chmod +x fastp && \
+    ln -s /tools/fastp /usr/local/bin/fastp
+
+RUN mkdir -p /app
+WORKDIR /app
+RUN pip install dagster-pipes
+
+RUN apk add --no-cache parallel
+VOLUME /scripts
+VOLUME /inputs
+VOLUME /outputs
