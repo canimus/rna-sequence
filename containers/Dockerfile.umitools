@@ -1,0 +1,36 @@
+# --- Stage 1: Build Stage ---
+FROM python:3.11-slim AS build
+
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip and install libraries with no cache
+RUN pip install --upgrade --no-cache-dir pip
+
+# Install packages into a temporary directory
+RUN pip install --no-cache-dir --prefix=/install umi-tools dagster-pipes
+
+# --- Stage 2: Final Slim Runtime ---
+FROM python:3.11-slim AS runtime
+
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Copy installed packages from build stage
+COPY --from=build /install /usr/local
+
+# Set working directory
+WORKDIR /app
+
+# Mount points
+VOLUME /scripts
+VOLUME /inputs
+VOLUME /outputs
+
