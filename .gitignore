@@ -217,3 +217,7 @@ marimo/_lsp/
 __marimo__/
 
 uv.lock
+
+# security
+certs
+temp/
