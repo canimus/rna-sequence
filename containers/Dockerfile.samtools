@@ -35,4 +35,3 @@ WORKDIR /app
 VOLUME /scripts
 VOLUME /inputs
 VOLUME /outputs
-

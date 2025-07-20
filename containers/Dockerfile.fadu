@@ -1,0 +1,74 @@
+# --------------------------
+# Stage 1: Build stage
+# --------------------------
+FROM julia:1.11-alpine AS builder
+
+# Install build + Python deps
+RUN apk add --no-cache \
+    build-base \
+    gfortran \
+    git \
+    perl \
+    ncurses-dev \
+    libffi-dev \
+    zlib-dev \
+    xz-dev \
+    libxml2-dev \
+    bash \
+    curl \
+    ca-certificates \
+    libdeflate-dev
+
+
+# Set Julia depot path
+ENV JULIA_DEPOT_PATH=/julia_depot
+
+# Pre-install Julia packages
+COPY fadu.jl /tmp/fadu.jl
+RUN julia /tmp/fadu.jl
+
+
+# --------------------------
+# Stage 2: Runtime stage
+# --------------------------
+FROM julia:1.11-alpine AS runtime
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+# Install runtime dependencies (incl. Python 3.11 base)
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    libstdc++ \
+    libgfortran \
+    libgcc \
+    ncurses-libs \
+    libdeflate \
+    zlib \
+    libxml2 \
+    bash \
+    curl \
+    ca-certificates \
+    libffi \
+    perl \
+    git
+
+
+# Copy Julia packages
+ENV JULIA_DEPOT_PATH=/julia_depot
+
+# julia
+COPY --from=builder /julia_depot /julia_depot
+
+# python
+RUN pip3 install --no-cache-dir --break-system-packages dagster-pipes
+
+WORKDIR /usr/src
+RUN git clone https://github.com/IGS/FADU.git
+
+# Set working directory
+WORKDIR /app
+
+VOLUME /inputs
+VOLUME /references
+VOLUME /outputs
+VOLUME /scripts

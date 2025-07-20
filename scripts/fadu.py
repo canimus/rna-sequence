@@ -4,7 +4,12 @@ from glob import glob
 from dagster_pipes import open_dagster_pipes
 
 with open_dagster_pipes() as context:
-    result = subprocess.run(["samtools", "--version"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["julia", "fadu.jl", "--help"],
+        capture_output=True,
+        text=True,
+        cwd="/usr/src/FADU",
+    )
     version = result.stdout.strip()
     context.log.info(str(version))
     # context.report_asset_materialization(metadata={"bowtie2_tools_version": version})
@@ -14,7 +19,7 @@ with open_dagster_pipes() as context:
     # bc_pattern = context.get_extra("bc_pattern")
     # parallel_threads = context.get_extra("parallel_threads")
 
-    context.log.info("SamTools: Started")
+    context.log.info("Fadu: Started")
 
     # find_proc = subprocess.Popen(
     #     ["find", "/inputs", "-name", "*.fasta"], stdout=subprocess.PIPE
@@ -31,4 +36,4 @@ with open_dagster_pipes() as context:
     # find_proc.stdout.close()
 
     # output = subprocess.run(command, capture_output=True, text=True)
-    context.log.info("SamTools: Completed")
+    context.log.info("Fadu: Completed")
