@@ -16,15 +16,20 @@ with open_dagster_pipes() as context:
     # command = ["find", "/inputs", "-name", "\"*.gz\"", "|", "parallel", "-j", f"{parallel_threads}", dynamic_command]
 
     context.log.info("UmiTools: Started")
-    
-    find_proc = subprocess.Popen(['find', '/inputs', '-name', '*.gz'], stdout=subprocess.PIPE)
+
+    find_proc = subprocess.Popen(
+        ["find", "/inputs", "-name", "*.gz"], stdout=subprocess.PIPE
+    )
     parallel_cmd = [
-        'parallel', '-j', str(parallel_threads),
-        f'umi_tools extract --bc-pattern={bc_pattern} --stdin={{}} --stdout=/outputs/{{/}} --log=/tmp/{{/}}.log'
+        "parallel",
+        "-j",
+        str(parallel_threads),
+        f"umi_tools extract --bc-pattern={bc_pattern} --stdin={{}} --stdout=/outputs/{{/}} --log=/tmp/{{/}}.log",
     ]
-    output = subprocess.run(parallel_cmd, stdin=find_proc.stdout, capture_output=True, text=True)
+    output = subprocess.run(
+        parallel_cmd, stdin=find_proc.stdout, capture_output=True, text=True
+    )
     find_proc.stdout.close()
 
-    
-    #output = subprocess.run(command, capture_output=True, text=True)
+    # output = subprocess.run(command, capture_output=True, text=True)
     context.log.info("UmiTools: Completed")
