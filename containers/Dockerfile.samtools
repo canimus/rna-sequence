@@ -1,0 +1,38 @@
+FROM python:3.11-alpine AS build
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apk add --no-cache build-base zlib-dev bzip2-dev xz-dev curl-dev ncurses-dev libdeflate-dev wget
+RUN mkdir -p /downloads
+WORKDIR /downloads
+RUN wget https://github.com/samtools/samtools/releases/download/1.22.1/samtools-1.22.1.tar.bz2
+
+RUN tar -xvjf samtools-1.22.1.tar.bz2
+WORKDIR /downloads/samtools-1.22.1
+
+RUN mkdir -p /tools
+RUN ./configure --prefix=/tools
+RUN make && make install
+
+RUN pip install --no-cache-dir --prefix=/install dagster-pipes
+
+FROM python:3.11-alpine AS runtime
+
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Parallel command
+RUN apk add --no-cache parallel zlib-dev bzip2-dev xz-dev curl-dev ncurses-dev libdeflate-dev
+
+# Copy installed packages from build stage
+COPY --from=build /install /usr/local
+COPY --from=build /tools /usr/local
+
+# Set working directory
+WORKDIR /app
+
+# Mount points
+VOLUME /scripts
+VOLUME /inputs
+VOLUME /outputs
+
