@@ -1,0 +1,53 @@
+# --- Stage 1: Build Stage ---
+FROM python:3.11-slim AS build
+
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    build-essential \
+    python3-dev \
+    ca-certificates \
+    zlib1g \
+    libstdc++6 \
+    xz-utils \
+    perl \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# subread
+RUN mkdir /tools
+RUN wget https://deac-fra.dl.sourceforge.net/project/subread/subread-2.1.1/subread-2.1.1-Linux-x86_64.tar.gz && \
+    tar -zxvf subread-2.1.1-Linux-x86_64.tar.gz && \
+    cp -r subread-2.1.1-Linux-x86_64 /tools && \
+    rm -rf subread-2.1.1*
+
+# Upgrade pip and install libraries with no cache
+RUN pip install --upgrade --no-cache-dir pip
+
+# Install packages into a temporary directory
+RUN pip install --no-cache-dir --prefix=/install dagster-pipes
+
+# --- Stage 2: Final Slim Runtime ---
+FROM python:3.11-slim AS runtime
+
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Parallel command
+RUN apt-get update && apt-get install -y \
+    parallel \
+    ca-certificates \
+    zlib1g \
+    libstdc++6 \
+    xz-utils \
+    perl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed packages from build stage
+COPY --from=build /install /usr/local
+COPY --from=build /tools /usr/local
+
+ENV PATH="/usr/local/subread-2.1.1-Linux-x86_64/bin:$PATH"

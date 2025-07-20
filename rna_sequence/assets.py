@@ -586,3 +586,123 @@ def fadu_quantification(
     yield dg.AssetCheckResult(passed=True, check_name="file_count")
 
     yield dg.Output(value=str(result.get_results()))
+
+
+@dg.asset(
+    deps=[fadu_quantification],
+    check_specs=[
+        dg.AssetCheckSpec(
+            name="file_count",
+            description="Feature count check placeholder",
+            asset="feature_counts",
+            blocking=True,
+        )
+    ],
+    kinds={"docker"},
+)
+def feature_counts(
+    context: dg.AssetExecutionContext,
+    config: RnaSequenceConfig,
+    docker_client: PipesDockerClient,
+) -> Iterator[dg.Output[str]]:
+    """Docker execution of subread tool"""
+    result = docker_client.run(
+        image="subread",
+        command=["python", "/scripts/subread.py"],
+        context=context,
+        # extras={
+        #     "parallel_threads": config.bowtie_parallel,
+        # },
+        container_kwargs={
+            "auto_remove": False,
+            "volumes": {
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "scripts"): {
+                    "bind": "/scripts",
+                    "mode": "ro",
+                },
+                str(
+                    Path(os.getenv("RNA_SEQUENCE_HOME")) / "data" / "bowtie2" / "inputs"
+                ): {
+                    "bind": "/inputs",
+                    "mode": "ro",
+                },
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs5"): {
+                    "bind": "/outputs",
+                    "mode": "rw",
+                },
+            },
+        },
+    )
+
+    # FIXME: use the glob instead of the listdir
+    # files_in = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "inputs"))
+    # files_out = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs2"))
+
+    # _stems = compose(first, mc("split", "-"), at("stem"), Path)
+    # _f_ins = list(map(_stems, files_in))
+    # _f_outs = list(map(_stems, files_out))
+    # complete = set(_f_ins).issubset(set(_f_outs))
+
+    yield dg.AssetCheckResult(passed=True, check_name="file_count")
+
+    yield dg.Output(value=str(result.get_results()))
+
+
+@dg.asset(
+    deps=[feature_counts],
+    check_specs=[
+        dg.AssetCheckSpec(
+            name="file_count",
+            description="PyDeseq check placeholder",
+            asset="differential_expression",
+            blocking=True,
+        )
+    ],
+    kinds={"docker"},
+)
+def differential_expression(
+    context: dg.AssetExecutionContext,
+    config: RnaSequenceConfig,
+    docker_client: PipesDockerClient,
+) -> Iterator[dg.Output[str]]:
+    """Docker execution of subread tool"""
+    result = docker_client.run(
+        image="pydeseq2",
+        command=["python", "/scripts/pydeseq2.py"],
+        context=context,
+        # extras={
+        #     "parallel_threads": config.bowtie_parallel,
+        # },
+        container_kwargs={
+            "auto_remove": False,
+            "volumes": {
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "scripts"): {
+                    "bind": "/scripts",
+                    "mode": "ro",
+                },
+                str(
+                    Path(os.getenv("RNA_SEQUENCE_HOME")) / "data" / "bowtie2" / "inputs"
+                ): {
+                    "bind": "/inputs",
+                    "mode": "ro",
+                },
+                str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs5"): {
+                    "bind": "/outputs",
+                    "mode": "rw",
+                },
+            },
+        },
+    )
+
+    # FIXME: use the glob instead of the listdir
+    # files_in = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "inputs"))
+    # files_out = os.listdir(str(Path(os.getenv("RNA_SEQUENCE_HOME")) / "outputs2"))
+
+    # _stems = compose(first, mc("split", "-"), at("stem"), Path)
+    # _f_ins = list(map(_stems, files_in))
+    # _f_outs = list(map(_stems, files_out))
+    # complete = set(_f_ins).issubset(set(_f_outs))
+
+    yield dg.AssetCheckResult(passed=True, check_name="file_count")
+
+    yield dg.Output(value=str(result.get_results()))
