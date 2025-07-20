@@ -11,9 +11,7 @@ with open_dagster_pipes() as context:
     extras = context.extras
     context.log.info(str(extras))
     bc_pattern = context.get_extra("bc_pattern")
-    parallel_threads = context.get_extra("parallel_threads")
-    # dynamic_command = "'umi_tools extract --bc-pattern=" + bc_pattern + " --stdin={} --stdout=/outputs/$(basename {}) --log=/tmp/$(basename {}).log'"
-    # command = ["find", "/inputs", "-name", "\"*.gz\"", "|", "parallel", "-j", f"{parallel_threads}", dynamic_command]
+    parallel_threads = context.get_extra("parallel_threads")    
 
     context.log.info("UmiTools: Started")
 
